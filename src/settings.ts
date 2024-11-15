@@ -6,4 +6,4 @@ export const PLATFORM_NAME = 'HomebridgeVirtualSwitches';
 /**
  * This must match the name of your plugin as defined the package.json
  */
-export const PLUGIN_NAME = 'homebridge-virtual-switch';
+export const PLUGIN_NAME = '@vandubois/homebridge-virtual-switch';

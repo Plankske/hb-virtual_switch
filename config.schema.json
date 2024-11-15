@@ -9,13 +9,14 @@
         "title": "Name",
         "type": "string",
         "required": true,
-        "default": "HomebridgeVirtualSwitches"
+        "default": "HomebridgeVirtualSwitches",
+        "description": "This name is shown in as child bridge name and in logs."
       },
       "platform": {
         "type": "string",
         "title": "Platform Name",
         "default": "HomebridgeVirtualSwitches",
-        "description": "Do not change Name, nor Platform name!"
+        "description": "Do not change Platform name!"
       },
       "devices": {
         "type": "array",
@@ -30,66 +31,221 @@
               "required": true
             },
             "NormallyClosed": {
-            "type": "boolean",
-            "title": "Normally Closed Switch",
-            "default": false,
-            "description": "Check to make the switch normally-closed (on). Default is normally-open (off)."
+              "type": "boolean",
+              "title": "Normally Closed switch",
+              "default": false,
+              "description": "Sets switch is ON (closed) by default and OFF (open) when triggered."
             },
             "SwitchStayOn": {
               "type": "boolean",
               "title": "Stateful",
               "default": false,
-              "description": "Check to make the switch stateful (remain on after trigger)."
+              "description": "When selected the switch will remain in triggered state until switched off manually or by automation (i.e., it is not be controlled by a timer)."
             },
             "Time": {
               "type": "integer",
-              "title": "Auto Off Time (in ms)",
-              "default": 5000,
-               "description": "Duration in milliseconds that the switch stays on after triggering. Only relevant if the switch is not stateful."
+              "title": "Timer (in ms)",
+              "default": 0,
+              "description": "Time (in milliseconds) the switch stays triggered.",
+              "condition": {
+                "functionBody": "return model.devices[arrayIndices[0]].SwitchStayOn === false && model.devices[arrayIndices[0]].UseCustomTime === false;"
+              }
+            },
+            "UseCustomTime": {
+              "type": "boolean",
+              "title": "Set timer time in days/hours/minutes/seconds instead of milliseconds.",
+              "default": false,
+              "description": "Total time cannot exceed ~47 days (46 days + 24 hours + 60 minutes + 60 seconds",
+              "condition": { "functionBody": "return model.devices[arrayIndices[0]].SwitchStayOn === false;" }
+            },
+            "TimeDays": {
+              "type": "integer",
+              "title": "Days",
+              "default": 0,
+              "minimum": 0,
+              "maximum": 47,
+              "condition": { "functionBody": "return model.devices[arrayIndices[0]].SwitchStayOn === false && model.devices[arrayIndices[0]].UseCustomTime === true;" }
+            },
+            "TimeHours": {
+              "type": "integer",
+              "title": "Hours",
+              "default": 0,
+              "minimum": 0,
+              "maximum": 24,
+              "condition": { "functionBody": "return model.devices[arrayIndices[0]].SwitchStayOn === false && model.devices[arrayIndices[0]].UseCustomTime === true;" }
+            },
+            "TimeMinutes": {
+              "type": "integer",
+              "title": "Minutes",
+              "default": 0,
+              "minimum": 0,
+              "maximum": 60,
+              "condition": { "functionBody": "return model.devices[arrayIndices[0]].SwitchStayOn === false && model.devices[arrayIndices[0]].UseCustomTime === true;" }
+            },
+            "TimeSeconds": {
+              "type": "integer",
+              "title": "Seconds",
+              "default": 0,
+              "minimum": 0,
+              "maximum": 60,
+              "condition": { "functionBody": "return model.devices[arrayIndices[0]].SwitchStayOn === false && model.devices[arrayIndices[0]].UseCustomTime === true;" }
+            },
+            "TimerPersistent": {
+              "type": "boolean",
+              "title": "Persistent Timer",
+              "default": false,
+              "description": "Keeps timer active through Homebridge restarts.",
+              "condition": { "functionBody": "return model.devices[arrayIndices[0]].SwitchStayOn === false;" }
             },
             "UseLogFile": {
               "type": "boolean",
-              "title": "Monitor Log File",
+              "title": "Trigger switch by keywords appearing in the Homebridge Log File",
               "default": false,
-              "description": "Check if this switch will be triggered by log file keywords/phrases."
+              "description": "Trigger switch based on keywords  / keyphrases in the Homebridge log."
             },
             "LogFilePath": {
               "type": "string",
               "title": "Log File Path",
               "default": "/var/lib/homebridge/homebridge.log",
-              "description": "Enter the full path to the log file."
+              "description": "Full path to the log file.",
+              "condition": { "functionBody": "return model.devices[arrayIndices[0]].UseLogFile === true;" }
             },
             "Keywords": {
               "type": "array",
               "title": "Keywords",
-              "items": {
-                "type": "string"
-              }, 
-              "description": "Enter keywords/phrases that will trigger the switch when they appear in the log file (case independent)."
+              "description": "Keywords / Keyphrases that will trigger the switch when they appear in the log file (case insensitive).",
+              "condition": { "functionBody": "return model.devices && model.devices[arrayIndices[0]] && model.devices[arrayIndices[0]].UseLogFile === true;" },
+              "items": { 
+                "type": "string",
+                "title": "Keyword"
+              },
+              "default": [""],
+              "uniqueItems": true
             },
             "EnableStartupDelay": {
               "type": "boolean",
-              "title": "Enable Startup Delay",
+              "title": "Delay switch start",
               "default": false,
-              "description": "Delay the switch activation after Homebridge starts."
+              "description": "Delay switch activation after Homebridge restarts.For log monitoring switches only!"
+            },
+            "UseCustomStartupDelay": {
+              "type": "boolean",
+              "title": "Set the switch start up delay in days, hours, minutes and seconds instead of milliseconds.",
+              "default": false,
+              "description": "Total time cannot exceed ~47 days (46 days + 24 hours + 60 minutes + 60 seconds).",
+              "condition": { "functionBody": "return model.devices[arrayIndices[0]].EnableStartupDelay === true;" }
             },
             "StartupDelay": {
               "type": "integer",
               "title": "Startup Delay (in ms)",
-              "default": 10000,
-              "description": "Time in milliseconds to delay the switch start after Homebridge restarts."
+              "description": "Startup delay in milliseconds.",
+              "condition": {
+              "functionBody": "return model.devices[arrayIndices[0]].EnableStartupDelay === true && model.devices[arrayIndices[0]].UseCustomStartupDelay === false;"
+              }
             },
-            "RememberState" : {
+            "StartupDelayDays": {
+              "type": "integer",
+              "title": "Startup Delay Days",
+              "default": 0,
+              "minimum": 0,
+              "maximum": 46,
+              "condition": { "functionBody": "return model.devices[arrayIndices[0]].EnableStartupDelay === true && model.devices[arrayIndices[0]].UseCustomStartupDelay === true;" }
+            },
+            "StartupDelayHours": {
+              "type": "integer",
+              "title": "Startup Delay Hours",
+              "default": 0,
+              "minimum": 0,
+              "maximum": 24,
+              "condition": { "functionBody": "return model.devices[arrayIndices[0]].EnableStartupDelay === true && model.devices[arrayIndices[0]].UseCustomStartupDelay === true;" }
+            },
+            "StartupDelayMinutes": {
+              "type": "integer",
+              "title": "Startup Delay Minutes",
+              "default": 0,
+              "minimum": 0,
+              "maximum": 60,
+              "condition": { "functionBody": "return model.devices[arrayIndices[0]].EnableStartupDelay === true && model.devices[arrayIndices[0]].UseCustomStartupDelay === true;" }
+            },
+            "StartupDelaySeconds": {
+              "type": "integer",
+              "title": "Startup Delay Seconds",
+              "default": 0,
+              "minimum": 0,
+              "maximum": 60,
+              "condition": { "functionBody": "return model.devices[arrayIndices[0]].EnableStartupDelay === true && model.devices[arrayIndices[0]].UseCustomStartupDelay === true;" }
+            },
+            "RememberState": {
               "type": "boolean",
-              "title" : "Restart in last known state",
-              "default" : false,
-              "description" : "Switch will restart in its last known state (only for non-log-monitoring stateful switches)."
+              "title": "Restart the switch in its last known state",
+              "default": false,
+              "description": "Retain last state after restart (non-log-monitoring stateful switches only).",
+              "condition": { "functionBody": "return model.devices[arrayIndices[0]].SwitchStayOn === true && model.devices[arrayIndices[0]].UseLogFile === false;" }
             }
           },
           "required": ["Name"]
         }
       }
     },
-    "required": ["name","platform", "devices"]
-  }
+    "required": ["name", "platform", "devices"]
+  },
+  "layout": [
+    {
+      "type": "array",
+      "key": "devices",
+      "title": "Devices",
+      "buttonText": "Add Another Switch",
+      "expandable": true,
+      "expanded": true,
+      "items": [
+        {
+          "type": "fieldset",
+          "items": [
+            "devices[].Name",
+            "devices[].SwitchStayOn",
+            "devices[].NormallyClosed",
+            "devices[].Time",
+            "devices[].UseCustomTime",
+            "devices[].TimeDays",
+            "devices[].TimeHours",
+            "devices[].TimeMinutes",
+            "devices[].TimeSeconds",
+            "devices[].TimerPersistent",
+            
+            "devices[].UseLogFile",
+            "devices[].LogFilePath",
+            {
+              "key": "devices[].Keywords",
+              "type": "array",
+              "title": "Keywords",
+              "buttonText": "Add Keyword",
+              "startEmpty": false,
+              "items": [
+                {
+                  "key": "devices[].Keywords[]",
+                  "title": "Keyword",
+                  "type": "string"
+                }
+              ]
+            },
+            "devices[].EnableStartupDelay",
+            "devices[].UseCustomStartupDelay",
+            "devices[].StartupDelay",
+            "devices[].StartupDelayDays",
+            "devices[].StartupDelayHours",
+            "devices[].StartupDelayMinutes",
+            "devices[].StartupDelaySeconds",
+            "devices[].RememberState"
+          ]
+        }
+      ]
+    },
+    {
+      "type": "fieldset",
+      "title": "Plugin config",
+      "expandable": true,
+      "expanded": false,
+      "items": ["name"]
+    }
+  ]
 }

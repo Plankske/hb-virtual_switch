@@ -9,15 +9,32 @@ import path from 'path';
 // Define an interface for device configuration
 interface DeviceConfig {
   Name: string;
+  NormallyClosed: boolean;
   SwitchStayOn: boolean;
   Time: number;
+  UseCustomTime: boolean;
+  TimeDays: number;
+  TimeHours: number;
+  TimeMinutes: number;
+  TimeSeconds: number;
+  TimerPersistent: boolean
   UseLogFile: boolean;
   LogFilePath: string;
   Keywords: string[];
   EnableStartupDelay: boolean;
+  UseCustomStartupDelay: boolean;
   StartupDelay: number;
-  NormallyClosed: boolean;
+  StartupDelayDays: number
+  StartupDelayHours: number;
+  StartupDelayMinutes: number;
+  StartupDelaySeconds: number;
   RememberState: boolean;
+}
+
+// Define an interface for timer state
+interface TimerState {
+  targetTime: number;
+  isRunning: boolean;
 }
 
 export class HomebridgeVirtualSwitchesPlatform implements DynamicPlatformPlugin {
@@ -26,6 +43,7 @@ export class HomebridgeVirtualSwitchesPlatform implements DynamicPlatformPlugin 
   public readonly accessories: PlatformAccessory[] = [];
   private accessoryInstances: Map<string, HomebridgeVirtualSwitchesAccessory> = new Map();
   private tailProcesses: Map<string, ReturnType<typeof spawn>> = new Map();
+  private timerStates: Map<string, TimerState> = new Map();
 
   // Declare the properties
   private spawn: typeof import('child_process').spawn | undefined;
@@ -75,8 +93,54 @@ export class HomebridgeVirtualSwitchesPlatform implements DynamicPlatformPlugin 
   }
 
   discoverDevices() {
-    // `this.config.devices` is an array of device configurations
+    // Get configured devices from config
     const devices: DeviceConfig[] = Array.isArray(this.config.devices) ? this.config.devices : [];
+
+    // Create a set of configured device UUIDs for quick lookup
+    const configuredUUIDs = new Set(
+      devices.map(device => this.api.hap.uuid.generate(device.Name)),
+    );
+
+    // First, remove accessories that are no longer in the config
+    const accessoriesToRemove = this.accessories.filter(accessory => 
+      !configuredUUIDs.has(accessory.UUID),
+    );
+
+    if (accessoriesToRemove.length >0) {
+      this.log.info(`Removing ${accessoriesToRemove.length} unconfigured accessories`);
+
+      for (const accessory of accessoriesToRemove) {
+        const uuid = accessory.UUID;
+        
+        // Stop any running tail processes
+        if (this.tailProcesses.has(uuid)) {
+          const tailProcess = this.tailProcesses.get(uuid);
+          if (tailProcess) {
+            tailProcess.kill();
+            this.tailProcesses.delete(uuid);
+          }
+        }
+        
+        // Clean up timer states
+        this.clearTimerState(accessory.displayName);
+        
+        // Remove from accessory instances
+        this.accessoryInstances.delete(uuid);
+        
+        // Remove the index from our accessories array
+        const index = this.accessories.indexOf(accessory);
+        if (index > -1) {
+          this.accessories.splice(index, 1);
+        }
+      }
+      
+      // Unregister from HomeKit
+      this.api.unregisterPlatformAccessories(
+        PLUGIN_NAME,
+        PLATFORM_NAME,
+        accessoriesToRemove,
+      );
+    }
 
     for (const deviceConfig of devices) {
       if (!deviceConfig.Name || deviceConfig.Name.trim() === '') {
@@ -85,50 +149,69 @@ export class HomebridgeVirtualSwitchesPlatform implements DynamicPlatformPlugin 
         //continue; // Skip this device but continue processing others
       }
 
+      // Ensure all properties are passed through
       const device = {
-        Name: deviceConfig.Name,
-        SwitchStayOn: deviceConfig.SwitchStayOn,
-        Time: deviceConfig.Time,
-        UseLogFile: deviceConfig.UseLogFile,
-        LogFilePath: deviceConfig.LogFilePath,
-        Keywords: Array.isArray(deviceConfig.Keywords) ? deviceConfig.Keywords : [],
-        EnableStartupDelay: deviceConfig.EnableStartupDelay,
-        StartupDelay: deviceConfig.StartupDelay,
-        NormallyClosed: deviceConfig.NormallyClosed,
-        RememberState: deviceConfig.RememberState,
+        ...deviceConfig,
+        Keywords: Array.isArray(deviceConfig.Keywords) ? deviceConfig.Keywords : [], // Only override Keywords to ensure it's an array
       };
-      
+     
       this.log.debug('DEBUG: Device config:', JSON.stringify(device));
       
       const uuid = this.api.hap.uuid.generate(device.Name);
       const existingAccessory = this.accessories.find(accessory => accessory.UUID === uuid);
 
+      // Load last switch state if RememberSwitchSate = true
       let lastState: boolean | null = null;
       if (deviceConfig.RememberState) {
         lastState = this.loadSwitchState(device.Name);
       }
 
+      // Load persistent timer state if TimerPersistant = true
+      let timerState: TimerState | null = null;
+      if (deviceConfig.TimerPersistent) {
+        timerState = this.loadTimerState(device.Name);
+        if (timerState && timerState.isRunning) {
+          this.log.debug(`DEBUG: Loaded persistent timer state for "${device.Name}"`);
+        }
+      }
+
       if (existingAccessory) {
         this.log.info('Restoring existing accessory from cache:', existingAccessory.displayName);
-        existingAccessory.context.device = { ...device, lastState };
+        existingAccessory.context.device = { ...device, lastState, timerState };
         this.api.updatePlatformAccessories([existingAccessory]);
         const accessoryInstance = new HomebridgeVirtualSwitchesAccessory(this, existingAccessory);
         this.accessoryInstances.set(uuid, accessoryInstance);
       } else {
         this.log.info('Adding new accessory:', device.Name);
         const accessory = new this.api.platformAccessory(device.Name, uuid);
-        accessory.context.device = { ...device, lastState };
+        accessory.context.device = { ...device, lastState, timerState };
         const accessoryInstance = new HomebridgeVirtualSwitchesAccessory(this, accessory);
         this.accessoryInstances.set(uuid, accessoryInstance);
         this.api.registerPlatformAccessories(PLUGIN_NAME, PLATFORM_NAME, [accessory]);
       }
 
-      // Start log monitoring with the specified delay
+      // Start log monitoring with the specified delay after startup
       if (device.UseLogFile) {
-        const startupDelay = device.EnableStartupDelay ? device.StartupDelay || 10000 : 0;
+        let startupDelay =0;
+
+        if (device.UseCustomStartupDelay) {
+          if (device.UseCustomStartupDelay) {
+            // Convert days, hours, minutes and seconds to milliseconds
+            startupDelay = (
+              ((((device.StartupDelayDays * 24 + device.StartupDelayHours) * 60) + device.StartupDelayMinutes) * 60 + device.StartupDelaySeconds) * 1000);
+            const timeStr = `${device.StartupDelayDays}d ${device.StartupDelayHours}h ${device.StartupDelayMinutes}m ${device.StartupDelaySeconds}s`;
+            this.log.debug(`DEBUG: Using startup delay set in day/hr/min/sec for "${device.Name}": ${startupDelay}ms (${timeStr})`);
+          } else {
+            // Use the default startupDelay
+            startupDelay = device.StartupDelay;
+            this.log.debug(`DEBUG: Using startup delay set in milliseconds for "${device.Name}": ${startupDelay}ms`);
+          }
+        }
+
         setTimeout(() => {
           this.startLogMonitoring(device, uuid);
         }, startupDelay);
+        
       }
     }
   }
@@ -249,4 +332,97 @@ export class HomebridgeVirtualSwitchesPlatform implements DynamicPlatformPlugin 
     }
     return null;
   }
+
+  // Add new methods for persistent timer management
+  public saveTimerState(name: string, targetTime: number, isRunning: boolean) {
+    const timerStatePath = path.join(this.api.user.storagePath(), `${name}_timer.json`);
+    fs.writeFileSync(timerStatePath, JSON.stringify({ targetTime, isRunning }), 'utf8');
+    this.timerStates.set(name, { targetTime, isRunning });
+  }
+
+  public loadTimerState(name: string): TimerState | null {
+    try {
+      const timerStatePath = path.join(this.api.user.storagePath(), `${name}_timer.json`);
+      if (fs.existsSync(timerStatePath)) {
+        const data = fs.readFileSync(timerStatePath, 'utf8');
+        const parsed = JSON.parse(data);
+        this.timerStates.set(name, parsed);
+        return parsed;
+      }
+    } catch (error) {
+      this.log.error(`ERROR: Failed to load timer state for switch "${name}":`, error);
+    }
+    return null;
+  }
+
+  public clearTimerState(name: string) {
+    const timerStatePath = path.join(this.api.user.storagePath(), `${name}_timer.json`);
+    if (fs.existsSync(timerStatePath)) {
+      fs.unlinkSync(timerStatePath);
+    }
+    this.timerStates.delete(name);
+  }
+
+
+  // Helper to calculate the target time of Persistent switches
+  public calculateTargetTime(device: DeviceConfig): { targetTime: number; duration: number } {
+    const now = Date.now();
+    
+    if (device.TimerPersistent) {
+      if (device.UseCustomTime) {
+        // Convert days, hours, minutes, and seconds to milliseconds
+        const milliseconds = (
+          ((((device.TimeDays * 24 + device.TimeHours) * 60) + 
+          device.TimeMinutes) * 60 + device.TimeSeconds) * 1000
+        );
+        const targetTime = now + milliseconds;
+        const targetDate = new Date(targetTime);
+        this.log.debug(
+          `DEBUG: Persistent timer for "${device.Name}" will run until: ${targetDate.toLocaleString()}`,
+        );
+        return { targetTime, duration: milliseconds };
+      } else {
+        // Use the simple Time value (already in milliseconds)
+        const targetTime = now + device.Time;
+        const targetDate = new Date(targetTime);
+        this.log.debug(
+          `DEBUG: Persistent timer for "${device.Name}" will run until: ${targetDate.toLocaleString()}`,
+        );
+        return { targetTime, duration: device.Time };
+      }
+    } else {
+      // Handle non-persistent switches
+      if (device.UseCustomTime) {
+        // Convert days, hours, minutes, and seconds to milliseconds
+        const milliseconds = (
+          ((((device.TimeDays * 24 + device.TimeHours) * 60) + 
+          device.TimeMinutes) * 60 + device.TimeSeconds) * 1000
+        );
+        const targetTime = 0; // Non-persistent switches don't need a target time
+        const targetDate = new Date(now + milliseconds);
+        this.log.debug(
+          `DEBUG: Non-persistent timer for "${device.Name}" will run for ${milliseconds}ms until: ${targetDate.toLocaleString()}`,
+        );
+        return { targetTime, duration: milliseconds };
+      } else {
+        // Use the simple Time value (already in milliseconds)
+        const targetTime = 0; // Non-persistent switches don't need a target time
+        const duration = device.Time;
+        const targetDate = new Date(now + duration);
+        this.log.debug(
+          `DEBUG: Non-persistent timer for "${device.Name}" will run for ${duration}ms until: ${targetDate.toLocaleString()}`,
+        );
+        return { targetTime, duration };
+      }
+    }
+  }
+  
+  // Check if target time has been reached
+  public hasReachedTargetTime(targetTime: number): boolean {
+    if (targetTime === 0) {
+      return false;
+    }
+    return Date.now() >= targetTime;
+  }
+
 }

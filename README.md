@@ -78,7 +78,8 @@ Devices:
       - Total time in either time format cannot exceed ~47 days.
       - If both time formats are set correctly, the days/hours/minutes/seconds time will be used provided that box was also checked. If not the time in milliseconds will be used.
       - If no time is set in either format and the switch is not Stateful, the switch will not be initialized and an error will show in the log file
-
+      - When a timed switch is in its triggered state (say: ON) is triggered again (say: turned ON again) while the timer is still running down, the timer will reset and the full countdown will restart. (when the switch is 'untriggered', the switch is turned OFF)
+        
 
 
     - **Persistent Timer:** when selected, the switch (MUST be controlled by a timer) can be made to persist through Homebridge shutdowns and restarts. When the switch is triggered, the end time is calculated. If Homebridge shutsdown and then restarts, the plugin checks if that end time has been reached: 
@@ -138,7 +139,6 @@ Switches can be stateful or not. If set, the occurrence of one or more keywords/
 - **Stateful Switches:** Once triggered, reoccurrence of the keyword/phrase will not change the switch state until it is manually reset.
 - **Non-stateful Switches:** The switch will not be retriggered until the timer has expired.
 
-*Note:* Repeated triggering of a non-stateful switch will not extend nor reset the timer.
 
 ---
 ### Found a Bug?

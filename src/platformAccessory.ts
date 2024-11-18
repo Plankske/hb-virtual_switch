@@ -67,14 +67,22 @@ export class HomebridgeVirtualSwitchesAccessory {
 
   private initializeState() {
     const device = this.accessory.context.device;
-
-    // Check if CustomTime is selected with all fields as 0
-    if (!device.SwitchStayOn && device.CustomTime && device.TimeDays === 0 && device.TimeHours === 0 && device.TimeMinutes === 0 && device.TimeSeconds === 0) {
+    
+    // Check if UseCustomTime is selected with all custom time fields as 0
+    const hasZeroCustomTime = 
+      device.TimeDays === 0 &&
+      device.TimeHours === 0 &&
+      device.TimeMinutes === 0 &&
+      device.TimeSeconds === 0;
+      
+    if (!device.SwitchStayOn && device.UseCustomTime && hasZeroCustomTime) {
       throw new Error(`Switch "${device.Name}" cannot be initialized: "Set timer in days/hours/..." is selected and all time fields are 0 in switch config.`);
     }
 
-    // Check if Time is 0 when CustomTime is not selected
-    if (!device.SwitchStayOn && !device.CustomTime && device.Time === 0) {
+    // Check if Time is 0 when UseCustomTime is not selected
+    if (!device.SwitchStayOn && !device.UseCustomTime && device.Time === 0) {
+      this.platform.log.info(`SwitchStayon "${device.SwitchStayOn}"`);
+      this.platform.log.info(`UseCustomTime: "${device.UseCustomTime}"`);
       throw new Error(`Switch "${device.Name}" cannot be initialized:"Timer (in ms)" is 0 and "Set timer in day/hours/..." is not selected in switch config.`);
     }
     

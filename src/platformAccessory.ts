@@ -86,12 +86,7 @@ export class HomebridgeVirtualSwitchesAccessory {
       throw new Error(`Switch "${device.Name}" cannot be initialized:"Timer (in ms)" is 0 and "Set timer in day/hours/..." is not selected in switch config.`);
     }
     
-    // Initialize switch state
-    if (device.RememberState && device.lastState !== null) {
-      this.switchState = device.lastState;
-    } else {
-      this.switchState = device.NormallyClosed;
-    }
+    
 
     // Check for persistent timer state
     if (device.TimerPersistent && device.timerState) {
@@ -103,16 +98,26 @@ export class HomebridgeVirtualSwitchesAccessory {
           this.platform.clearTimerState(device.Name);
           this.platform.log.info(`Switch "${device.Name}" turned ${device.NormallyClosed ? 'on' : 'off'} as persistent timer expired during downtime.`);
         } else {
-          // Resume timer
+          // Resume timer and set correct state
           const remainingTime = targetTime - Date.now();
+          this.switchState = !device.NormallyClosed; // Set to triggered state
           this.startOffTimer({
             targetTime: targetTime,
             duration: remainingTime,
           });
-          this.platform.log.info(`Resuming persistent timer for "${device.Name}" with ${remainingTime}ms remaining.`);
+          this.platform.log.info(
+            `Resuming persistent timer for "${device.Name}" with ${remainingTime}ms remaining. Switch state set to ${this.switchState ? 'on' : 'off'}.`,
+          );
         }
       }
+    
+    // Initialize switch state
+    } else if (device.RememberState && device.lastState !== null) {
+      this.switchState = device.lastState;
+    } else {
+      this.switchState = device.NormallyClosed;
     }
+
 
     this.updateHomeKitState();
     

@@ -131,6 +131,7 @@ export class HomebridgeVirtualSwitchesAccessory {
   async setOn(value: CharacteristicValue) {
     const device = this.accessory.context.device;
     const newHomeKitState = value as boolean;
+    const isOneShotTimer = device.OneShotTimer;
 
     if (!device.NormallyClosed) {
       this.switchState = device.NormallyClosed ? !newHomeKitState : newHomeKitState;
@@ -139,13 +140,22 @@ export class HomebridgeVirtualSwitchesAccessory {
     }
 
     if (this.switchState !== device.NormallyClosed) {
-      this.platform.log.info(`Switch "${device.Name}" turned ${device.NormallyClosed ? 'off' : 'on'}.`);
+      //this.platform.log.info(`Switch "${device.Name}" turned ${device.NormallyClosed ? 'off' : 'on'}.`);
       if (!device.SwitchStayOn) {
-        const timerInfo = this.platform.calculateTargetTime(device);
-        this.startOffTimer(timerInfo);
+        // Only start timer if it's not running or if OneShotTimer is false
+        if (!isOneShotTimer || !this.timer || !this.timerEndTime || Date.now() >= this.timerEndTime) {
+          const timerInfo = this.platform.calculateTargetTime(device);
+          this.startOffTimer(timerInfo);
+        } else {
+          this.platform.log.debug(`DEBUG: "${device.Name}" Ignoring timer restart (OneShot timer is active)`);
+        }
+      } else {
+        this.platform.log.info(`Switch "${device.Name}" turned ${device.NormallyClosed ? 'off' : 'on'}.`);
       }
     } else {
-      this.platform.log.info(`Switch "${device.Name}" turned ${device.NormallyClosed ? 'on' : 'off'}.`);
+      if (device.SwitchStayOn) {
+        this.platform.log.info(`Switch "${device.Name}" turned ${device.NormallyClosed ? 'on' : 'off'}.`);
+      }
       this.clearTimer();
     }
 
@@ -161,6 +171,7 @@ export class HomebridgeVirtualSwitchesAccessory {
   public triggerSwitch() {
     const device = this.accessory.context.device;
     const isTriggered = this.switchState !== device.NormallyClosed;
+    const isOneShotTimer = device.OneShotTimer;
 
     // Handle stateful switches with log file monitoring
     if (isTriggered && device.SwitchStayOn && this.useLogFile) {
@@ -170,8 +181,11 @@ export class HomebridgeVirtualSwitchesAccessory {
 
     // Handle non-stateful switches with active timers
     if (isTriggered && !device.SwitchStayOn && this.timer && this.timerEndTime && Date.now() < this.timerEndTime) {
-      this.platform.log.debug(`DEBUG: "${device.Name}" Ignoring trigger as the timer is still active.`);
-      return;
+      if (isOneShotTimer) {
+        this.platform.log.debug(`DEBUG: "${device.Name}" Ignoring trigger as the timer is still active.`);
+        return;
+      }
+      // If not OneShot timer, continue with normal operation (timer will restart)
     }
 
     // Toggle switch state
@@ -179,17 +193,26 @@ export class HomebridgeVirtualSwitchesAccessory {
     this.updateHomeKitState();
   
     if (this.switchState !== device.NormallyClosed) {
-      this.platform.log.info(`Switch "${device.Name}" turned ${device.NormallyClosed ? 'off' : 'on'}.`);
+      //this.platform.log.info(`Switch "${device.Name}" turned ${device.NormallyClosed ? 'off' : 'on'}.`);
       if (!device.SwitchStayOn) {
-        if (device.TimerPersistent) {
-          const timerInfo = this.platform.calculateTargetTime(device);
-          this.startOffTimer(timerInfo);
+        // Only start timer if it's not running or if OneShotTimer is false
+        if (!isOneShotTimer || !this.timer || !this.timerEndTime || Date.now() >= this.timerEndTime) {
+          if (device.TimerPersistent) {
+            const timerInfo = this.platform.calculateTargetTime(device);
+            this.startOffTimer(timerInfo);
+          } else {
+            this.startOffTimer({ targetTime: 0, duration: device.Time });
+          }
         } else {
-          this.startOffTimer({ targetTime: 0, duration: device.Time });
+          this.platform.log.debug(`DEBUG: "${device.Name}" Keeping existing timer (OneShot timer is active)`);
         }
+      } else {
+        this.platform.log.info(`Switch "${device.Name}" turned ${device.NormallyClosed ? 'off' : 'on'}.`);
       }
     } else {
-      this.platform.log.info(`Switch "${device.Name}" turned ${device.NormallyClosed ? 'on' : 'off'}.`);
+      if (device.SwitchStayOn) {
+        this.platform.log.info(`Switch "${device.Name}" turned ${device.NormallyClosed ? 'on' : 'off'}.`);
+      }
       this.clearTimer();
     }
 
@@ -206,15 +229,18 @@ export class HomebridgeVirtualSwitchesAccessory {
     this.timerEndTime = timerInfo.targetTime || (Date.now() + timerInfo.duration);
   
     // Log timer information
+    const status = device.NormallyClosed ? 'off' : 'on';
+    const futureStatus = device.NormallyClosed ? 'on' : 'off';
+    
     if (device.TimerPersistent) {
       this.platform.log.info(
-        `Switch "${device.Name}" will turn ${device.NormallyClosed ? 'on' : 'off'} at ${new Date(this.timerEndTime).toLocaleString()}`,
+        `Switch "${device.Name}" turned ${status} and will turn ${futureStatus} at ${new Date(this.timerEndTime).toLocaleString()}`,
       );
       // Save persistent timer state
       this.platform.saveTimerState(device.Name, this.timerEndTime, true);
     } else {
       this.platform.log.info(
-        `Switch "${device.Name}" will turn ${device.NormallyClosed ? 'on' : 'off'} after ${timerInfo.duration} milliseconds.`,
+        `Switch "${device.Name}" turned ${status} and will turn ${futureStatus} after ${timerInfo.duration} milliseconds.`,
       );
     }
   

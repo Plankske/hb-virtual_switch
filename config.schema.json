@@ -97,6 +97,14 @@
               "description": "Keeps timer active through Homebridge restarts.",
               "condition": { "functionBody": "return model.devices[arrayIndices[0]].SwitchStayOn === false;" }
             },
+            "OneShotTimer": {
+              "title": "One Shot Timer",
+              "type": "boolean",
+              "required": false,
+              "default": false,
+              "description": "Prevent timer from restarting when the switch is triggered while the timer is still running",
+              "condition": { "functionBody": "return model.devices[arrayIndices[0]].SwitchStayOn === false;" }
+            },
             "UseLogFile": {
               "type": "boolean",
               "title": "Trigger switch by keywords appearing in the Homebridge Log File",
@@ -210,6 +218,7 @@
             "devices[].TimeHours",
             "devices[].TimeMinutes",
             "devices[].TimeSeconds",
+            "devices[].OneShotTimer",
             "devices[].TimerPersistent",
             
             "devices[].UseLogFile",

@@ -2,7 +2,7 @@
   "name": "@vandubois/homebridge-virtual-switch",
   "displayName": "Homebridge Virtual Switches",
   "type": "module",
-  "version": "1.2.2",
+  "version": "1.2.3",
   "private": false,
   "description": "Creation of virtual switches, triggered independently and by keywords appearing in the Homebridge log file.",
   "author": "DVDP",
@@ -25,7 +25,7 @@
   ],
   "main": "dist/index.js",
   "engines": {
-    "node": "^20.16.0 || ^18.20.4",
+    "node": ">=18.20.4",
     "homebridge": "^1.8.0 || ^2.0.0-beta.0"
   },
   "scripts": {

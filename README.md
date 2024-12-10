@@ -26,15 +26,16 @@
 
 `Stateful` switches have the option of being:
 - `normally closed` (initial state = ON). Default is normally open (i.e. initial state = OFF),
-- triggered manually (or via Homekit automations) or through `log file monitoring`. When certain keywords or keyphrases appear in the Homebridge log file, the switch will be triggered,
-- when the stateful switch is controled by `log file monitoring`, a `StartupDelay` to delay the start of the log file monitoring until Homebridge is fully initialized,
+- triggered manually (or via HomeKit automations) or through `log file monitoring`. When certain keywords or key phrases appear in the Homebridge log file, the switch will be triggered,
+- when the stateful switch is controlled by `log file monitoring`, a `StartupDelay` to delay the start of the log file monitoring until Homebridge is fully initialized,
 - when the stateful switch is not triggered by `log file monitoring`, the switch can be set to `restart in its last known state` when Homebridge restarts.
 
 `Timer controlled` switches have the option of being:
 - `normally closed` (initial state = ON). Default is normally open (i.e. initial state = OFF),
 - triggered manually (or via Homekit automations) or through `log file monitoring`. When certain keywords or keyphrases appear in the Homebridge log file, the switch will be triggered,
-- when the stateful switch is controled by `log file monitoring`, a `StartupDelay` to delay the start of the log file monitoring until Homebridge is fully initialized,
+- when the stateful switch is controlled by `log file monitoring`, a `StartupDelay` to delay the start of the log file monitoring until Homebridge is fully initialized,
 - `persistent`. When a timer is running and Homebridge shuts down, the switch is be restored in its last know state and timer will resume and switch at the originally scheduled end time. 
+- `One Shot timer`. When triggering the switch while a timer is running, the timer will not reset.
 
 **Note on `log monitoring`:**
 
@@ -47,7 +48,7 @@ If a plugin loses API authentication, a log message alerts you. This log message
 ### Additional Requirements
 The following packages are needed for the plugin to function properly:
 - `strip-ansi`
-- `child_process`
+
 
 ---
 ### Configuration
@@ -80,12 +81,14 @@ Devices:
       - If no time is set in either format and the switch is not Stateful, the switch will not be initialized and an error will show in the log file
       - When a timed switch is in its triggered state (say: ON) is triggered again (say: turned ON again) while the timer is still running down, the timer will reset and the full countdown will restart. (when the switch is 'untriggered', the switch is turned OFF)
         
-
-
     - **Persistent Timer:** when selected, the switch (MUST be controlled by a timer) can be made to persist through Homebridge shutdowns and restarts. When the switch is triggered, the end time is calculated. If Homebridge shutsdown and then restarts, the plugin checks if that end time has been reached: 
 
         - If the end time was reached while Homebridge was shut down, the switch reverts to its untriggered state upon restart.
         - If the end time has not yet been reached while Homebridge was shut down, the switch continue in its triggered state until the end time is reached.
+    
+    - **One Shot Timer:** when selected and the switch is triggered again while the timer is counting down, the timer will continue its countdown and not reset. When not selected, the timer resets and restarts the countdown.
+    
+        <u>Note:</u> this does not work for timed switches that are controlled by `log file monitoring`. These switches are always One Shot timer switches, regardless of whether the box is checked or not. 
     
     
 - **Trigger switch by keywords appearing in the Homebridge Log File:** Select to trigger the switch by keywords that appear in the log file. The default file monitored is the Homebridge log file.
@@ -101,10 +104,13 @@ Devices:
         
     - **Keywords:** Enter one keyword or key phrase as it appears in the log file. 
        
-       <u>Note:</u> the plugin:
-        - ignore upper case letters in the keyword and the log file 
-        - removes ANSI escape characters from the keyword
-        - ignore keywords that appear in this plugin's DEBUG lines 
+       <u>Note:</u> 
+        
+        - the plugin:
+          - ignores upper case letters in the keyword and the log file 
+          - removes ANSI escape characters from the keyword
+          - ignores keywords that appear in this plugin's DEBUG lines 
+        - a keyword triggered switch that is on a timer is always a One Shot switch 
         
     - **Delay switch start:** Delay switch activation after Homebridge starts. Select this to prevent premature triggering of the switch by trigger ords that appear during e.g. the start of Homebridge.
        
